@@ -14,7 +14,8 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
-	simplifiedchinese "golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/net/html/charset"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 var ipv4Net net.IPNet
@@ -39,31 +40,7 @@ func argsInit() {
 
 	flag.Parse()
 }
-func isGBK(data []byte) bool {
-	length := len(data)
-	var i int = 0
-	for i < length {
-		//fmt.Printf("for %x\n", data[i])
-		if data[i] <= 0xff {
-			//编码小于等于127,只有一个字节的编码，兼容ASCII吗
-			i++
-			continue
-		} else {
-			//大于127的使用双字节编码
-			if data[i] >= 0x81 &&
-				data[i] <= 0xfe &&
-				data[i+1] >= 0x40 &&
-				data[i+1] <= 0xfe &&
-				data[i+1] != 0xf7 {
-				i += 2
-				continue
-			} else {
-				return false
-			}
-		}
-	}
-	return true
-}
+
 func hostTitleCrawl(ip string, client *http.Client, sem chan int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var url string
@@ -79,25 +56,34 @@ func hostTitleCrawl(ip string, client *http.Client, sem chan int, wg *sync.WaitG
 			continue
 		}
 
-		defer resp.Body.Close()
 		body, err := ioutil.ReadAll(resp.Body)
-
 		if err != nil {
+			resp.Body.Close()
 			continue
 		}
-		r := regexp.MustCompile("<title>(?P<title>[\\S ]+?)</title>")
-
-		if isGBK(body) {
-			//转 utf-8
+		_, charsetName, _ := charset.DetermineEncoding(body, "")
+		// windows-1252 也可能是
+		if charsetName == "gbk" {
 			body, err = simplifiedchinese.GBK.NewDecoder().Bytes(body)
 			if err != nil {
+				resp.Body.Close()
 				continue
 			}
 		}
-		res := r.FindStringSubmatch(string(body))
-		if len(res) == 2 {
-			fmt.Printf("[+] %d %s %s\n", resp.StatusCode, url, res[1])
+
+		r := regexp.MustCompile("<title>(?P<title>[\\S ]+?)</title>")
+
+		res := r.FindSubmatch(body)
+		if resp.StatusCode == 200 {
+			if len(res) == 2 {
+				fmt.Printf("[+] 200 %s %q\n", url, res[1])
+			}
+		} else if resp.StatusCode == 302 {
+			fmt.Printf("[-] 302 %s %s\n", url, resp.Header.Get("Location"))
+		} else {
+			fmt.Printf("[-] %d %s\n", resp.StatusCode, url)
 		}
+		resp.Body.Close()
 	}
 	<-sem
 }
