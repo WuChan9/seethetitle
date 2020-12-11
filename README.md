@@ -11,24 +11,11 @@ Usage: seethetitle.exe -n 192.168.0.1/24 -p 80,443
 
 
 
-## golang html 编码识别
+### html 编码识别
 
 > https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding
 
-　　2 遍的预扫描机制
-
-
-
-　　charset.DetermineEncoding 通过读取前 1024 字节
-
 ```
-_, charsetName, _ := charset.DetermineEncoding(body, "utf-8")
-//windows-1252 可能是
-if charsetName == "gbk" {
-	body, err = simplifiedchinese.GBK.NewDecoder().Bytes(body)
-	if err != nil {
-		continue
-	}
-} 
+_, charsetName, _ := charset.DetermineEncoding(body, "")
 ```
 
